@@ -1,0 +1,422 @@
+openapi: 3.0.3
+info:
+  title: '[Logistics] Logistics Partner System API'
+  version: 1.0.0
+  description: 'The third-party logistics partner (speedy-3pl) of the logistics domain: shipment requests and delivery
+    notices, translated to the platform''s contract. The partner''s API is strict (version 2.3): a request with
+    any other field is refused. Internal: only building blocks on the platform''s allow-list may call it. Facts
+    on evgt-intplat-logistics.'
+  contact:
+    name: Logistics Domain Team
+    url: https://github.com/azure-intelligence-domain/system-api-3pl
+  license:
+    name: MIT
+    url: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/LICENSE
+  x-gateway: other
+x-gateway: other
+externalDocs:
+  description: EventCatalog entry of the logistics domain
+  url: https://azure-intelligence-domain.github.io/eventcatalog/docs/domains/logistics/1.0.0
+servers:
+- url: https://apim-intplat-demo.azure-api.net/3pl
+  description: Gateway, product system-apis (internal callers only). No version in the URI.
+security:
+- platformToken: []
+tags:
+- name: Shipments
+  description: Shipments with the 3PL partner.
+paths:
+  /shipments:
+    x-summary: Shipments
+    post:
+      tags:
+      - Shipments
+      operationId: requestShipment
+      summary: Request Shipment
+      description: 'Asks the partner to ship an order. The partner picks it up at once: publishes ShipmentDispatched.
+        One shipment per order: a retry returns the existing one (200) and publishes nothing. Any field the partner''s
+        API 2.3 does not know: 400.'
+      parameters:
+      - $ref: '#/components/parameters/correlationId'
+      responses:
+        '201':
+          description: The shipment, dispatched.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/shipment'
+              example:
+                _links:
+                  self:
+                    href: /shipments/SPD-004711
+                shipmentId: SPD-004711
+                orderId: '4711'
+                customerId: ACME
+                partnerId: speedy-3pl
+                status: dispatched
+                trackingNumber: SPD4711BE
+                dispatchedAt: '2026-10-04T07:30:00Z'
+          headers:
+            Location:
+              description: URI of the new resource.
+              schema:
+                type: string
+              example: /shipments/SPD-004711
+        '200':
+          description: The shipment already existed for this orderId.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/shipment'
+              example:
+                _links:
+                  self:
+                    href: /shipments/SPD-004711
+                shipmentId: SPD-004711
+                orderId: '4711'
+                customerId: ACME
+                partnerId: speedy-3pl
+                status: dispatched
+                trackingNumber: SPD4711BE
+                dispatchedAt: '2026-10-04T07:30:00Z'
+        '400':
+          description: The request does not match the contract, or the Correlation-Id header is missing or invalid.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problemDetail'
+              example:
+                type: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/docs/problems/invalid-request.md
+                title: Invalid Request
+                status: 400
+                detail: The request does not match the contract, or the Correlation-Id header is missing or invalid.
+                instance: /shipments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/shipmentRequest'
+            example:
+              orderId: '4711'
+              customerId: ACME
+              deliveryAddress:
+                street: Rue de la Loi 16
+                postalCode: '1000'
+                city: Brussels
+                countryCode: BE
+              orderLines:
+              - productId: SKU-1042
+                quantity: 12
+              requestedDeliveryDate: '2026-10-09'
+      x-business-keys:
+        orderid: body.orderId
+        customerid: body.customerId
+      x-events:
+      - ShipmentDispatched
+  /shipments/{shipmentId}:
+    x-summary: Shipment
+    get:
+      tags:
+      - Shipments
+      operationId: retrieveShipment
+      summary: Retrieve Shipment
+      description: One shipment.
+      parameters:
+      - $ref: '#/components/parameters/shipmentId'
+      - $ref: '#/components/parameters/correlationId'
+      responses:
+        '200':
+          description: The shipment.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/shipment'
+              example:
+                _links:
+                  self:
+                    href: /shipments/SPD-004711
+                shipmentId: SPD-004711
+                orderId: '4711'
+                customerId: ACME
+                partnerId: speedy-3pl
+                status: dispatched
+                trackingNumber: SPD4711BE
+                dispatchedAt: '2026-10-04T07:30:00Z'
+        '400':
+          description: The request does not match the contract, or the Correlation-Id header is missing or invalid.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problemDetail'
+              example:
+                type: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/docs/problems/invalid-request.md
+                title: Invalid Request
+                status: 400
+                detail: The request does not match the contract, or the Correlation-Id header is missing or invalid.
+                instance: /shipments/SPD-004711
+        '404':
+          description: The partner has no shipment with this id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problemDetail'
+              example:
+                type: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/docs/problems/not-found.md
+                title: Shipment Not Found
+                status: 404
+                detail: The partner has no shipment with this id.
+                instance: /shipments/SPD-004711
+      x-business-keys: {}
+  /shipments/{shipmentId}/delivery:
+    x-summary: Shipment Delivery
+    post:
+      tags:
+      - Shipments
+      operationId: recordDelivery
+      summary: Record Delivery
+      description: 'The partner''s delivery notice: the customer received the shipment. Publishes ShipmentDelivered.
+        A repeated notice changes nothing.'
+      parameters:
+      - $ref: '#/components/parameters/shipmentId'
+      - $ref: '#/components/parameters/correlationId'
+      responses:
+        '200':
+          description: The shipment, delivered.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/shipment'
+              example:
+                _links:
+                  self:
+                    href: /shipments/SPD-004711
+                shipmentId: SPD-004711
+                orderId: '4711'
+                customerId: ACME
+                partnerId: speedy-3pl
+                status: delivered
+                trackingNumber: SPD4711BE
+                dispatchedAt: '2026-10-04T07:30:00Z'
+                deliveredAt: '2026-10-08T14:10:00Z'
+                receivedBy: J. Peeters
+        '400':
+          description: The request does not match the contract, or the Correlation-Id header is missing or invalid.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problemDetail'
+              example:
+                type: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/docs/problems/invalid-request.md
+                title: Invalid Request
+                status: 400
+                detail: The request does not match the contract, or the Correlation-Id header is missing or invalid.
+                instance: /shipments/SPD-004711/delivery
+        '404':
+          description: The partner has no shipment with this id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problemDetail'
+              example:
+                type: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/docs/problems/not-found.md
+                title: Shipment Not Found
+                status: 404
+                detail: The partner has no shipment with this id.
+                instance: /shipments/SPD-004711/delivery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/deliveryNotice'
+            example:
+              receivedBy: J. Peeters
+      x-business-keys: {}
+      x-events:
+      - ShipmentDelivered
+components:
+  securitySchemes:
+    platformToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Entra ID token for the intplat-platform-apis application, of a runtime identity on the platform's
+        allow-list (internal-callers).
+  parameters:
+    correlationId:
+      name: Correlation-Id
+      in: header
+      required: true
+      description: The business journey this call belongs to, for example ord-4711.
+      schema:
+        type: string
+        pattern: ^[a-z0-9]+(-[a-z0-9]+)*$
+        maxLength: 64
+      example: ord-4711
+    shipmentId:
+      name: shipmentId
+      in: path
+      required: true
+      description: Shipment id, e.g. SPD-004711.
+      schema:
+        type: string
+        pattern: ^SPD-[0-9]+$
+      example: SPD-004711
+  schemas:
+    deliveryAddress:
+      type: object
+      description: Delivery address.
+      required:
+      - street
+      - postalCode
+      - city
+      - countryCode
+      properties:
+        street:
+          type: string
+          description: Street and number.
+        postalCode:
+          type: string
+          description: Postal code.
+        city:
+          type: string
+          description: City.
+        countryCode:
+          type: string
+          description: ISO 3166-1 alpha-2.
+          pattern: ^[A-Z]{2}$
+    shipmentRequest:
+      type: object
+      description: 'A shipment request, exactly as the partner''s API (version 2.3) takes it: no other fields.'
+      required:
+      - orderId
+      - deliveryAddress
+      - orderLines
+      properties:
+        orderId:
+          type: string
+          description: The platform's order id.
+        customerId:
+          type: string
+          description: The consignee, for the business key.
+        deliveryAddress:
+          $ref: '#/components/schemas/deliveryAddress'
+        orderLines:
+          type: array
+          minItems: 1
+          description: What to ship.
+          items:
+            type: object
+            description: A line of the order.
+            required:
+            - productId
+            - quantity
+            properties:
+              productId:
+                type: string
+                description: The product, e.g. SKU-1042.
+              quantity:
+                type: integer
+                description: Units.
+                minimum: 1
+        requestedDeliveryDate:
+          type: string
+          description: Requested delivery date. ISO 8601.
+          format: date
+      additionalProperties: false
+    deliveryNotice:
+      type: object
+      description: The partner's notice that the consignment was delivered.
+      properties:
+        deliveredAt:
+          type: string
+          description: When; now if omitted. ISO 8601, UTC.
+          format: date-time
+        receivedBy:
+          type: string
+          description: Who signed for it.
+    shipment:
+      type: object
+      description: A shipment with the partner.
+      required:
+      - _links
+      - shipmentId
+      - orderId
+      - partnerId
+      - status
+      - trackingNumber
+      - dispatchedAt
+      properties:
+        _links:
+          type: object
+          description: HAL links.
+          required:
+          - self
+          properties:
+            self:
+              $ref: '#/components/schemas/halLink'
+        shipmentId:
+          type: string
+          description: Consignment id.
+        orderId:
+          type: string
+          description: The order.
+        customerId:
+          type: string
+          description: The consignee.
+        partnerId:
+          type: string
+          description: The 3PL partner.
+        status:
+          type: string
+          description: Lifecycle.
+          enum:
+          - dispatched
+          - delivered
+        trackingNumber:
+          type: string
+          description: Tracking number.
+        dispatchedAt:
+          type: string
+          description: Picked up. ISO 8601, UTC.
+          format: date-time
+        deliveredAt:
+          type: string
+          description: Delivered. ISO 8601, UTC.
+          format: date-time
+        receivedBy:
+          type: string
+          description: Who signed for it.
+    halLink:
+      type: object
+      description: A HAL link.
+      required:
+      - href
+      properties:
+        href:
+          type: string
+          description: URI relative to the API root.
+    problemDetail:
+      type: object
+      description: Problem Details (RFC 9457).
+      required:
+      - title
+      - detail
+      properties:
+        type:
+          type: string
+          description: Problem type.
+          format: uri
+        title:
+          type: string
+          description: Summary.
+        status:
+          type: integer
+          description: HTTP status.
+        detail:
+          type: string
+          description: This occurrence.
+        instance:
+          type: string
+          description: Request URI.

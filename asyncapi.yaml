@@ -1,0 +1,230 @@
+asyncapi: 2.6.0
+id: urn:azure-intelligence-domain:logistics:system-api-3pl
+info:
+  title: '[Logistics] Logistics Partner Events'
+  version: 1.0.0
+  description: The business facts of the logistics domain, published by the 3PL System API to evgt-intplat-logistics.
+    Every event carries orderid and partnerid as business keys (and customerid when known) and the order's journey
+    as correlationid.
+  contact:
+    name: Logistics Domain Team
+    url: https://github.com/azure-intelligence-domain/system-api-3pl
+  license:
+    name: MIT
+    url: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/LICENSE
+tags:
+- name: logistics
+  description: Logistics domain.
+externalDocs:
+  description: EventCatalog entry of the logistics domain
+  url: https://azure-intelligence-domain.github.io/eventcatalog/docs/domains/logistics/1.0.0
+defaultContentType: application/cloudevents+json
+servers:
+  demo-event-grid:
+    $ref: https://raw.githubusercontent.com/azure-intelligence-domain/contracts/v1.2.0/asyncapi/landscape.asyncapi.yaml#/components/servers/demo-event-grid
+channels:
+  logistics.system-api-3pl.event.shipment-dispatched:
+    description: The 3PL partner picked up the order's shipment.
+    servers:
+    - demo-event-grid
+    x-configurations:
+      demo:
+        eventGrid:
+          topic: evgt-intplat-logistics
+          eventType: com.acme.logistics.shipmentDispatched
+    publish:
+      operationId: publishShipmentDispatched
+      summary: Publish ShipmentDispatched.
+      description: 'The 3PL System API publishes ShipmentDispatched when this fact happens: The 3PL partner picked
+        up the order''s shipment.'
+      security:
+      - entraIdEventGrid:
+        - https://eventgrid.azure.net/.default
+      tags:
+      - name: logistics
+        description: Logistics domain.
+      externalDocs:
+        description: ShipmentDispatched in EventCatalog
+        url: https://azure-intelligence-domain.github.io/eventcatalog/docs/events/shipmentDispatched
+      x-producers:
+        demo:
+        - system-api-3pl
+      message:
+        $ref: '#/components/messages/shipmentDispatched'
+  logistics.system-api-3pl.event.shipment-delivered:
+    description: The customer received the order's shipment.
+    servers:
+    - demo-event-grid
+    x-configurations:
+      demo:
+        eventGrid:
+          topic: evgt-intplat-logistics
+          eventType: com.acme.logistics.shipmentDelivered
+    publish:
+      operationId: publishShipmentDelivered
+      summary: Publish ShipmentDelivered.
+      description: 'The 3PL System API publishes ShipmentDelivered when this fact happens: The customer received
+        the order''s shipment.'
+      security:
+      - entraIdEventGrid:
+        - https://eventgrid.azure.net/.default
+      tags:
+      - name: logistics
+        description: Logistics domain.
+      externalDocs:
+        description: ShipmentDelivered in EventCatalog
+        url: https://azure-intelligence-domain.github.io/eventcatalog/docs/events/shipmentDelivered
+      x-producers:
+        demo:
+        - system-api-3pl
+      message:
+        $ref: '#/components/messages/shipmentDelivered'
+components:
+  securitySchemes:
+    entraIdEventGrid:
+      $ref: https://raw.githubusercontent.com/azure-intelligence-domain/contracts/v1.2.0/asyncapi/landscape.asyncapi.yaml#/components/securitySchemes/entraIdEventGrid
+  messages:
+    shipmentDispatched:
+      messageId: shipmentDispatched
+      name: shipmentDispatched
+      title: Shipment Dispatched
+      summary: The 3PL partner picked up the order's shipment.
+      description: CloudEvent of type com.acme.logistics.shipmentDispatched. The 3PL partner picked up the order's
+        shipment.
+      contentType: application/cloudevents+json
+      payload:
+        allOf:
+        - $ref: https://raw.githubusercontent.com/azure-intelligence-domain/contracts/v1.2.0/schemas/envelope/1.1.0/envelope.schema.json
+        - type: object
+          description: What this event adds to the envelope.
+          required:
+          - type
+          - orderid
+          - partnerid
+          - data
+          properties:
+            type:
+              const: com.acme.logistics.shipmentDispatched
+            orderid:
+              type: string
+            partnerid:
+              type: string
+            data:
+              $ref: '#/components/schemas/shipmentDispatchedData'
+      examples:
+      - name: acmeOrder4711
+        summary: ShipmentDispatched for ACME's order 4711.
+        payload:
+          specversion: '1.0'
+          id: shipmentDispatched-4711-0001
+          source: /system-api-3pl/1.0.0
+          type: com.acme.logistics.shipmentDispatched
+          time: '2026-10-04T07:30:01Z'
+          datacontenttype: application/json
+          correlationid: ord-4711
+          customerid: ACME
+          orderid: '4711'
+          partnerid: speedy-3pl
+          data:
+            orderId: '4711'
+            shipmentId: SPD-004711
+            partnerId: speedy-3pl
+            trackingNumber: SPD4711BE
+            dispatchedAt: '2026-10-04T07:30:00Z'
+    shipmentDelivered:
+      messageId: shipmentDelivered
+      name: shipmentDelivered
+      title: Shipment Delivered
+      summary: The customer received the order's shipment.
+      description: CloudEvent of type com.acme.logistics.shipmentDelivered. The customer received the order's shipment.
+      contentType: application/cloudevents+json
+      payload:
+        allOf:
+        - $ref: https://raw.githubusercontent.com/azure-intelligence-domain/contracts/v1.2.0/schemas/envelope/1.1.0/envelope.schema.json
+        - type: object
+          description: What this event adds to the envelope.
+          required:
+          - type
+          - orderid
+          - partnerid
+          - data
+          properties:
+            type:
+              const: com.acme.logistics.shipmentDelivered
+            orderid:
+              type: string
+            partnerid:
+              type: string
+            data:
+              $ref: '#/components/schemas/shipmentDeliveredData'
+      examples:
+      - name: acmeOrder4711
+        summary: ShipmentDelivered for ACME's order 4711.
+        payload:
+          specversion: '1.0'
+          id: shipmentDelivered-4711-0001
+          source: /system-api-3pl/1.0.0
+          type: com.acme.logistics.shipmentDelivered
+          time: '2026-10-08T14:10:01Z'
+          datacontenttype: application/json
+          correlationid: ord-4711
+          customerid: ACME
+          orderid: '4711'
+          partnerid: speedy-3pl
+          data:
+            orderId: '4711'
+            shipmentId: SPD-004711
+            partnerId: speedy-3pl
+            deliveredAt: '2026-10-08T14:10:00Z'
+  schemas:
+    shipmentDispatchedData:
+      type: object
+      description: The shipment.
+      required:
+      - orderId
+      - shipmentId
+      - partnerId
+      - trackingNumber
+      - dispatchedAt
+      properties:
+        orderId:
+          type: string
+          description: The order.
+        shipmentId:
+          type: string
+          description: Shipment id.
+        partnerId:
+          type: string
+          description: The partner.
+        trackingNumber:
+          type: string
+          description: Tracking number.
+        dispatchedAt:
+          type: string
+          description: When. ISO 8601, UTC.
+          format: date-time
+    shipmentDeliveredData:
+      type: object
+      description: The delivery.
+      required:
+      - orderId
+      - shipmentId
+      - partnerId
+      - deliveredAt
+      properties:
+        orderId:
+          type: string
+          description: The order.
+        shipmentId:
+          type: string
+          description: Shipment id.
+        partnerId:
+          type: string
+          description: The partner.
+        deliveredAt:
+          type: string
+          description: When. ISO 8601, UTC.
+          format: date-time
+        receivedBy:
+          type: string
+          description: Who signed for it.
