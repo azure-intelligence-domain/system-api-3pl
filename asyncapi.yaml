@@ -2,7 +2,7 @@ asyncapi: 2.6.0
 id: urn:azure-intelligence-domain:logistics:system-api-3pl
 info:
   title: '[Logistics] Logistics Partner Events'
-  version: 1.0.0
+  version: 1.1.0
   description: The business facts of the logistics domain, published by the 3PL System API to evgt-intplat-logistics.
     Every event carries orderid and partnerid as business keys (and customerid when known) and the order's journey
     as correlationid.
@@ -23,6 +23,62 @@ servers:
   demo-event-grid:
     $ref: https://raw.githubusercontent.com/azure-intelligence-domain/contracts/v1.2.0/asyncapi/landscape.asyncapi.yaml#/components/servers/demo-event-grid
 channels:
+  logistics.system-api-3pl.event.shipment-booked:
+    description: The 3PL partner accepted and booked the order's consignment; it is not picked up yet.
+    servers:
+    - demo-event-grid
+    x-configurations:
+      demo:
+        eventGrid:
+          topic: evgt-intplat-logistics
+          eventType: com.acme.logistics.shipmentBooked
+    publish:
+      operationId: publishShipmentBooked
+      summary: Publish ShipmentBooked.
+      description: 'The 3PL System API publishes ShipmentBooked when this fact happens: The 3PL partner accepted
+        and booked the order''s consignment; it is not picked up yet.'
+      security:
+      - entraIdEventGrid:
+        - https://eventgrid.azure.net/.default
+      tags:
+      - name: logistics
+        description: Logistics domain.
+      externalDocs:
+        description: ShipmentBooked in EventCatalog
+        url: https://azure-intelligence-domain.github.io/eventcatalog/docs/events/shipmentBooked
+      x-producers:
+        demo:
+        - system-api-3pl
+      message:
+        $ref: '#/components/messages/shipmentBooked'
+  logistics.system-api-3pl.event.shipment-cancelled:
+    description: A booked consignment was cancelled before the partner picked it up.
+    servers:
+    - demo-event-grid
+    x-configurations:
+      demo:
+        eventGrid:
+          topic: evgt-intplat-logistics
+          eventType: com.acme.logistics.shipmentCancelled
+    publish:
+      operationId: publishShipmentCancelled
+      summary: Publish ShipmentCancelled.
+      description: 'The 3PL System API publishes ShipmentCancelled when this fact happens: A booked consignment
+        was cancelled before the partner picked it up.'
+      security:
+      - entraIdEventGrid:
+        - https://eventgrid.azure.net/.default
+      tags:
+      - name: logistics
+        description: Logistics domain.
+      externalDocs:
+        description: ShipmentCancelled in EventCatalog
+        url: https://azure-intelligence-domain.github.io/eventcatalog/docs/events/shipmentCancelled
+      x-producers:
+        demo:
+        - system-api-3pl
+      message:
+        $ref: '#/components/messages/shipmentCancelled'
   logistics.system-api-3pl.event.shipment-dispatched:
     description: The 3PL partner picked up the order's shipment.
     servers:
@@ -84,6 +140,100 @@ components:
     entraIdEventGrid:
       $ref: https://raw.githubusercontent.com/azure-intelligence-domain/contracts/v1.2.0/asyncapi/landscape.asyncapi.yaml#/components/securitySchemes/entraIdEventGrid
   messages:
+    shipmentBooked:
+      messageId: shipmentBooked
+      name: shipmentBooked
+      title: Shipment Booked
+      summary: The 3PL partner accepted and booked the order's consignment; it is not picked up yet.
+      description: CloudEvent of type com.acme.logistics.shipmentBooked. The 3PL partner accepted and booked the
+        order's consignment; it is not picked up yet.
+      contentType: application/cloudevents+json
+      payload:
+        allOf:
+        - $ref: https://raw.githubusercontent.com/azure-intelligence-domain/contracts/v1.2.0/schemas/envelope/1.1.0/envelope.schema.json
+        - type: object
+          description: What this event adds to the envelope.
+          required:
+          - type
+          - orderid
+          - partnerid
+          - data
+          properties:
+            type:
+              const: com.acme.logistics.shipmentBooked
+            orderid:
+              type: string
+            partnerid:
+              type: string
+            data:
+              $ref: '#/components/schemas/shipmentBookedData'
+      examples:
+      - name: acmeOrder4711
+        summary: ShipmentBooked for ACME's order 4711.
+        payload:
+          specversion: '1.0'
+          id: shipmentBooked-4711-0001
+          source: /system-api-3pl/1.0.0
+          type: com.acme.logistics.shipmentBooked
+          time: '2026-10-03T09:16:01Z'
+          datacontenttype: application/json
+          correlationid: ord-4711
+          customerid: ACME
+          orderid: '4711'
+          partnerid: speedy-3pl
+          data:
+            orderId: '4711'
+            shipmentId: SPD-004711
+            partnerId: speedy-3pl
+            trackingNumber: SPD4711BE
+            bookedAt: '2026-10-03T09:16:00Z'
+    shipmentCancelled:
+      messageId: shipmentCancelled
+      name: shipmentCancelled
+      title: Shipment Cancelled
+      summary: A booked consignment was cancelled before the partner picked it up.
+      description: CloudEvent of type com.acme.logistics.shipmentCancelled. A booked consignment was cancelled before
+        the partner picked it up.
+      contentType: application/cloudevents+json
+      payload:
+        allOf:
+        - $ref: https://raw.githubusercontent.com/azure-intelligence-domain/contracts/v1.2.0/schemas/envelope/1.1.0/envelope.schema.json
+        - type: object
+          description: What this event adds to the envelope.
+          required:
+          - type
+          - orderid
+          - partnerid
+          - data
+          properties:
+            type:
+              const: com.acme.logistics.shipmentCancelled
+            orderid:
+              type: string
+            partnerid:
+              type: string
+            data:
+              $ref: '#/components/schemas/shipmentCancelledData'
+      examples:
+      - name: acmeOrder4711
+        summary: ShipmentCancelled for ACME's order 4711.
+        payload:
+          specversion: '1.0'
+          id: shipmentCancelled-4711-0001
+          source: /system-api-3pl/1.0.0
+          type: com.acme.logistics.shipmentCancelled
+          time: '2026-10-03T09:30:04Z'
+          datacontenttype: application/json
+          correlationid: ord-4711
+          customerid: ACME
+          orderid: '4711'
+          partnerid: speedy-3pl
+          data:
+            orderId: '4711'
+            shipmentId: SPD-004711
+            partnerId: speedy-3pl
+            reason: Order cancelled.
+            cancelledAt: '2026-10-03T09:30:03Z'
     shipmentDispatched:
       messageId: shipmentDispatched
       name: shipmentDispatched
@@ -177,6 +327,57 @@ components:
             partnerId: speedy-3pl
             deliveredAt: '2026-10-08T14:10:00Z'
   schemas:
+    shipmentBookedData:
+      type: object
+      description: The booking.
+      required:
+      - orderId
+      - shipmentId
+      - partnerId
+      - trackingNumber
+      - bookedAt
+      properties:
+        orderId:
+          type: string
+          description: The order.
+        shipmentId:
+          type: string
+          description: Shipment id.
+        partnerId:
+          type: string
+          description: The partner.
+        trackingNumber:
+          type: string
+          description: Tracking number.
+        bookedAt:
+          type: string
+          description: When. ISO 8601, UTC.
+          format: date-time
+    shipmentCancelledData:
+      type: object
+      description: The cancelled booking.
+      required:
+      - orderId
+      - shipmentId
+      - partnerId
+      - cancelledAt
+      properties:
+        orderId:
+          type: string
+          description: The order.
+        shipmentId:
+          type: string
+          description: Shipment id.
+        partnerId:
+          type: string
+          description: The partner.
+        reason:
+          type: string
+          description: Why.
+        cancelledAt:
+          type: string
+          description: When. ISO 8601, UTC.
+          format: date-time
     shipmentDispatchedData:
       type: object
       description: The shipment.

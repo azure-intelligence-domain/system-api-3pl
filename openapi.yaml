@@ -1,11 +1,11 @@
 openapi: 3.0.3
 info:
   title: '[Logistics] Logistics Partner System API'
-  version: 1.0.0
-  description: 'The third-party logistics partner (speedy-3pl) of the logistics domain: shipment requests and delivery
-    notices, translated to the platform''s contract. The partner''s API is strict (version 2.3): a request with
-    any other field is refused. Internal: only building blocks on the platform''s allow-list may call it. Facts
-    on evgt-intplat-logistics.'
+  version: 1.1.0
+  description: 'The third-party logistics partner (speedy-3pl) of the logistics domain: shipment bookings, pick-up
+    and delivery notices, translated to the platform''s contract. The partner''s API is strict (version 2.3): a
+    request with any other field is refused. Internal: only building blocks on the platform''s allow-list may call
+    it. Facts on evgt-intplat-logistics.'
   contact:
     name: Logistics Domain Team
     url: https://github.com/azure-intelligence-domain/system-api-3pl
@@ -33,9 +33,10 @@ paths:
       - Shipments
       operationId: requestShipment
       summary: Request Shipment
-      description: 'Asks the partner to ship an order. The partner picks it up at once: publishes ShipmentDispatched.
-        One shipment per order: a retry returns the existing one (200) and publishes nothing. Any field the partner''s
-        API 2.3 does not know: 400.'
+      description: 'Deprecated since 1.1.0: book with POST /shipment-bookings, and the partner reports the pick-up.
+        Asks the partner to ship an order, picked up at once: publishes ShipmentDispatched. One shipment per order:
+        a retry returns the existing one (200) and publishes nothing. Any field the partner''s API 2.3 does not
+        know: 400.'
       parameters:
       - $ref: '#/components/parameters/correlationId'
       responses:
@@ -114,6 +115,7 @@ paths:
         customerid: body.customerId
       x-events:
       - ShipmentDispatched
+      deprecated: true
   /shipments/{shipmentId}:
     x-summary: Shipment
     get:
@@ -121,7 +123,8 @@ paths:
       - Shipments
       operationId: retrieveShipment
       summary: Retrieve Shipment
-      description: One shipment.
+      description: 'One shipment: a consignment the partner picked up. A booking not picked up yet is not a shipment
+        (404).'
       parameters:
       - $ref: '#/components/parameters/shipmentId'
       - $ref: '#/components/parameters/correlationId'
@@ -235,6 +238,387 @@ paths:
       x-business-keys: {}
       x-events:
       - ShipmentDelivered
+  /shipment-bookings:
+    x-summary: Shipment Bookings
+    post:
+      tags:
+      - Shipments
+      operationId: bookShipment
+      summary: Book Shipment
+      description: 'Books an order''s consignment with the partner; the partner reports the pick-up later. Publishes
+        ShipmentBooked. One booking per order: a retry returns the existing one (200) and publishes nothing. Any
+        field the partner''s API 2.3 does not know: 400 (since 1.1.0).'
+      parameters:
+      - $ref: '#/components/parameters/correlationId'
+      responses:
+        '201':
+          description: The booking.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/shipmentBooking'
+              example:
+                _links:
+                  self:
+                    href: /shipment-bookings/SPD-004711
+                shipmentId: SPD-004711
+                orderId: '4711'
+                customerId: ACME
+                partnerId: speedy-3pl
+                status: booked
+                trackingNumber: SPD4711BE
+                deliveryAddress:
+                  street: Rue de la Loi 16
+                  postalCode: '1000'
+                  city: Brussels
+                  countryCode: BE
+                orderLines:
+                - productId: SKU-1042
+                  quantity: 12
+                requestedDeliveryDate: '2026-10-09'
+                bookedAt: '2026-10-03T09:16:00Z'
+          headers:
+            Location:
+              description: URI of the new resource.
+              schema:
+                type: string
+              example: /shipment-bookings/SPD-004711
+        '200':
+          description: The booking already existed for this orderId.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/shipmentBooking'
+              example:
+                _links:
+                  self:
+                    href: /shipment-bookings/SPD-004711
+                shipmentId: SPD-004711
+                orderId: '4711'
+                customerId: ACME
+                partnerId: speedy-3pl
+                status: booked
+                trackingNumber: SPD4711BE
+                deliveryAddress:
+                  street: Rue de la Loi 16
+                  postalCode: '1000'
+                  city: Brussels
+                  countryCode: BE
+                orderLines:
+                - productId: SKU-1042
+                  quantity: 12
+                requestedDeliveryDate: '2026-10-09'
+                bookedAt: '2026-10-03T09:16:00Z'
+        '400':
+          description: The request does not match the contract, or the Correlation-Id header is missing or invalid.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problemDetail'
+              example:
+                type: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/docs/problems/invalid-request.md
+                title: Invalid Request
+                status: 400
+                detail: The request does not match the contract, or the Correlation-Id header is missing or invalid.
+                instance: /shipment-bookings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/shipmentRequest'
+            example:
+              orderId: '4711'
+              customerId: ACME
+              deliveryAddress:
+                street: Rue de la Loi 16
+                postalCode: '1000'
+                city: Brussels
+                countryCode: BE
+              orderLines:
+              - productId: SKU-1042
+                quantity: 12
+              requestedDeliveryDate: '2026-10-09'
+      x-business-keys:
+        orderid: body.orderId
+        customerid: body.customerId
+      x-events:
+      - ShipmentBooked
+    get:
+      tags:
+      - Shipments
+      operationId: retrieveListOfShipmentBookings
+      summary: Retrieve List of Shipment Bookings
+      description: 'The partner''s bookings, newest first, optionally only one status: status=booked is its work
+        list (since 1.1.0).'
+      parameters:
+      - $ref: '#/components/parameters/bookingStatus'
+      - $ref: '#/components/parameters/correlationId'
+      responses:
+        '200':
+          description: The bookings.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/shipmentBookingList'
+              example:
+                _links:
+                  self:
+                    href: /shipment-bookings?status=booked
+                totalCount: 1
+                _embedded:
+                  shipmentBookings:
+                  - _links:
+                      self:
+                        href: /shipment-bookings/SPD-004711
+                    shipmentId: SPD-004711
+                    orderId: '4711'
+                    customerId: ACME
+                    partnerId: speedy-3pl
+                    status: booked
+                    trackingNumber: SPD4711BE
+                    deliveryAddress:
+                      street: Rue de la Loi 16
+                      postalCode: '1000'
+                      city: Brussels
+                      countryCode: BE
+                    orderLines:
+                    - productId: SKU-1042
+                      quantity: 12
+                    requestedDeliveryDate: '2026-10-09'
+                    bookedAt: '2026-10-03T09:16:00Z'
+        '400':
+          description: The request does not match the contract, or the Correlation-Id header is missing or invalid.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problemDetail'
+              example:
+                type: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/docs/problems/invalid-request.md
+                title: Invalid Request
+                status: 400
+                detail: The request does not match the contract, or the Correlation-Id header is missing or invalid.
+                instance: /shipment-bookings?status=booked
+      x-business-keys: {}
+  /shipment-bookings/{shipmentId}:
+    x-summary: Shipment Booking
+    get:
+      tags:
+      - Shipments
+      operationId: retrieveShipmentBooking
+      summary: Retrieve Shipment Booking
+      description: One booking (since 1.1.0).
+      parameters:
+      - $ref: '#/components/parameters/shipmentId'
+      - $ref: '#/components/parameters/correlationId'
+      responses:
+        '200':
+          description: The booking.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/shipmentBooking'
+              example:
+                _links:
+                  self:
+                    href: /shipment-bookings/SPD-004711
+                shipmentId: SPD-004711
+                orderId: '4711'
+                customerId: ACME
+                partnerId: speedy-3pl
+                status: booked
+                trackingNumber: SPD4711BE
+                deliveryAddress:
+                  street: Rue de la Loi 16
+                  postalCode: '1000'
+                  city: Brussels
+                  countryCode: BE
+                orderLines:
+                - productId: SKU-1042
+                  quantity: 12
+                requestedDeliveryDate: '2026-10-09'
+                bookedAt: '2026-10-03T09:16:00Z'
+        '400':
+          description: The request does not match the contract, or the Correlation-Id header is missing or invalid.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problemDetail'
+              example:
+                type: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/docs/problems/invalid-request.md
+                title: Invalid Request
+                status: 400
+                detail: The request does not match the contract, or the Correlation-Id header is missing or invalid.
+                instance: /shipment-bookings/SPD-004711
+        '404':
+          description: The partner has no booking with this id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problemDetail'
+              example:
+                type: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/docs/problems/not-found.md
+                title: Booking Not Found
+                status: 404
+                detail: The partner has no booking with this id.
+                instance: /shipment-bookings/SPD-004711
+      x-business-keys: {}
+    delete:
+      tags:
+      - Shipments
+      operationId: cancelShipmentBooking
+      summary: Cancel Shipment Booking
+      description: 'Cancels a booking the partner has not picked up (soft delete: status cancelled). Publishes ShipmentCancelled.
+        Cancelling a cancelled booking changes nothing (since 1.1.0).'
+      parameters:
+      - $ref: '#/components/parameters/shipmentId'
+      - $ref: '#/components/parameters/reason'
+      - $ref: '#/components/parameters/correlationId'
+      responses:
+        '200':
+          description: The booking, cancelled.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/shipmentBooking'
+              example:
+                _links:
+                  self:
+                    href: /shipment-bookings/SPD-004711
+                shipmentId: SPD-004711
+                orderId: '4711'
+                customerId: ACME
+                partnerId: speedy-3pl
+                status: cancelled
+                trackingNumber: SPD4711BE
+                deliveryAddress:
+                  street: Rue de la Loi 16
+                  postalCode: '1000'
+                  city: Brussels
+                  countryCode: BE
+                orderLines:
+                - productId: SKU-1042
+                  quantity: 12
+                requestedDeliveryDate: '2026-10-09'
+                bookedAt: '2026-10-03T09:16:00Z'
+                cancelledAt: '2026-10-03T09:30:03Z'
+                cancellationReason: Order cancelled.
+        '400':
+          description: The request does not match the contract, or the Correlation-Id header is missing or invalid.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problemDetail'
+              example:
+                type: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/docs/problems/invalid-request.md
+                title: Invalid Request
+                status: 400
+                detail: The request does not match the contract, or the Correlation-Id header is missing or invalid.
+                instance: /shipment-bookings/SPD-004711
+        '404':
+          description: The partner has no booking with this id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problemDetail'
+              example:
+                type: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/docs/problems/not-found.md
+                title: Booking Not Found
+                status: 404
+                detail: The partner has no booking with this id.
+                instance: /shipment-bookings/SPD-004711
+        '409':
+          description: The partner picked the consignment up already; it can no longer be cancelled.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problemDetail'
+              example:
+                type: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/docs/problems/already-picked-up.md
+                title: Already Picked Up
+                status: 409
+                detail: The partner picked the consignment up already; it can no longer be cancelled.
+                instance: /shipment-bookings/SPD-004711
+      x-business-keys: {}
+      x-events:
+      - ShipmentCancelled
+  /shipment-bookings/{shipmentId}/pick-up:
+    x-summary: Shipment Pick Up
+    post:
+      tags:
+      - Shipments
+      operationId: recordPickUp
+      summary: Record Pick Up
+      description: 'The partner''s pick-up notice: the booked consignment left the warehouse and is a shipment now.
+        Publishes ShipmentDispatched. A repeated notice changes nothing (since 1.1.0).'
+      parameters:
+      - $ref: '#/components/parameters/shipmentId'
+      - $ref: '#/components/parameters/correlationId'
+      responses:
+        '200':
+          description: The shipment, dispatched.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/shipment'
+              example:
+                _links:
+                  self:
+                    href: /shipments/SPD-004711
+                shipmentId: SPD-004711
+                orderId: '4711'
+                customerId: ACME
+                partnerId: speedy-3pl
+                status: dispatched
+                trackingNumber: SPD4711BE
+                dispatchedAt: '2026-10-04T07:30:00Z'
+        '400':
+          description: The request does not match the contract, or the Correlation-Id header is missing or invalid.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problemDetail'
+              example:
+                type: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/docs/problems/invalid-request.md
+                title: Invalid Request
+                status: 400
+                detail: The request does not match the contract, or the Correlation-Id header is missing or invalid.
+                instance: /shipment-bookings/SPD-004711/pick-up
+        '404':
+          description: The partner has no booking with this id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problemDetail'
+              example:
+                type: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/docs/problems/not-found.md
+                title: Booking Not Found
+                status: 404
+                detail: The partner has no booking with this id.
+                instance: /shipment-bookings/SPD-004711/pick-up
+        '409':
+          description: The booking was cancelled; there is nothing to pick up.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/problemDetail'
+              example:
+                type: https://github.com/azure-intelligence-domain/system-api-3pl/blob/main/docs/problems/booking-cancelled.md
+                title: Booking Cancelled
+                status: 409
+                detail: The booking was cancelled; there is nothing to pick up.
+                instance: /shipment-bookings/SPD-004711/pick-up
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/pickUpNotice'
+            example:
+              pickedUpAt: '2026-10-04T07:30:00Z'
+      x-business-keys: {}
+      x-events:
+      - ShipmentDispatched
 components:
   securitySchemes:
     platformToken:
@@ -263,6 +647,27 @@ components:
         type: string
         pattern: ^SPD-[0-9]+$
       example: SPD-004711
+    reason:
+      name: reason
+      in: query
+      required: false
+      description: Why, at most 200 characters, e.g. Order cancelled.
+      schema:
+        type: string
+        maxLength: 200
+      example: Order cancelled.
+    bookingStatus:
+      name: status
+      in: query
+      required: false
+      description: Only bookings with this status, e.g. booked (the partner's work list).
+      schema:
+        type: string
+        enum:
+        - booked
+        - pickedUp
+        - cancelled
+      example: booked
   schemas:
     deliveryAddress:
       type: object
@@ -336,6 +741,127 @@ components:
         receivedBy:
           type: string
           description: Who signed for it.
+    pickUpNotice:
+      type: object
+      description: The partner's notice that it picked up the consignment.
+      properties:
+        pickedUpAt:
+          type: string
+          description: When; now if omitted. ISO 8601, UTC.
+          format: date-time
+    shipmentBooking:
+      type: object
+      description: A consignment booked with the partner, before and after pick-up.
+      required:
+      - _links
+      - shipmentId
+      - orderId
+      - partnerId
+      - status
+      - trackingNumber
+      - deliveryAddress
+      - orderLines
+      - bookedAt
+      properties:
+        _links:
+          type: object
+          description: HAL links.
+          required:
+          - self
+          properties:
+            self:
+              $ref: '#/components/schemas/halLink'
+        shipmentId:
+          type: string
+          description: Consignment id.
+        orderId:
+          type: string
+          description: The order.
+        customerId:
+          type: string
+          description: The consignee.
+        partnerId:
+          type: string
+          description: The 3PL partner.
+        status:
+          type: string
+          description: 'Lifecycle: booked, then picked up (a shipment) or cancelled.'
+          enum:
+          - booked
+          - pickedUp
+          - cancelled
+        trackingNumber:
+          type: string
+          description: Tracking number.
+        deliveryAddress:
+          $ref: '#/components/schemas/deliveryAddress'
+        orderLines:
+          type: array
+          description: What to ship.
+          items:
+            type: object
+            description: A line of the order.
+            required:
+            - productId
+            - quantity
+            properties:
+              productId:
+                type: string
+                description: The product, e.g. SKU-1042.
+              quantity:
+                type: integer
+                description: Units.
+                minimum: 1
+        requestedDeliveryDate:
+          type: string
+          description: Requested delivery date. ISO 8601.
+          format: date
+        bookedAt:
+          type: string
+          description: Booked. ISO 8601, UTC.
+          format: date-time
+        pickedUpAt:
+          type: string
+          description: Picked up. ISO 8601, UTC.
+          format: date-time
+        cancelledAt:
+          type: string
+          description: Cancelled. ISO 8601, UTC.
+          format: date-time
+        cancellationReason:
+          type: string
+          description: Why it was cancelled.
+    shipmentBookingList:
+      type: object
+      description: Bookings.
+      required:
+      - _links
+      - totalCount
+      - _embedded
+      properties:
+        _links:
+          type: object
+          description: HAL links.
+          required:
+          - self
+          properties:
+            self:
+              $ref: '#/components/schemas/halLink'
+        totalCount:
+          type: integer
+          description: Number of bookings.
+          minimum: 0
+        _embedded:
+          type: object
+          description: The bookings.
+          required:
+          - shipmentBookings
+          properties:
+            shipmentBookings:
+              type: array
+              description: Bookings.
+              items:
+                $ref: '#/components/schemas/shipmentBooking'
     shipment:
       type: object
       description: A shipment with the partner.
